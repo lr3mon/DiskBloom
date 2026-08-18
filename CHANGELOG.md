@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Reorganized the repository documentation around a Korean-first `README.md` with full English documentation in `README_EN.md`
+- Localized the README hero and app mockup labels to match the Korean-first product UI
+
 ### Planned
 
 - Developer ID signing and Apple notarization

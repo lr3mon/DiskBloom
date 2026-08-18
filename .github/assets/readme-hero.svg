@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560" role="img" aria-labelledby="title desc">
-  <title id="title">DiskBloom — Local-first disk space explorer for macOS</title>
-  <desc id="desc">A dark macOS utility window with a sidebar and colorful sunburst disk map.</desc>
+  <title id="title">DiskBloom — macOS 로컬 디스크 공간 탐색기</title>
+  <desc id="desc">사이드바와 다채로운 선버스트 디스크 지도를 갖춘 어두운 macOS 유틸리티 화면.</desc>
 
   <rect width="1400" height="560" rx="36" fill="#0B0E14"/>
   <path d="M0 425C248 357 396 487 645 431C888 376 1048 247 1400 302V560H0Z" fill="#11151D"/>
@@ -21,14 +21,14 @@
 
   <!-- Copy -->
   <text x="88" y="230" fill="#F4F6FA" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="72" font-weight="750" letter-spacing="-2">DiskBloom</text>
-  <text x="90" y="278" fill="#99A3B5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24">See what fills your Mac. Keep every byte private.</text>
+  <text x="90" y="278" fill="#99A3B5" font-family="-apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Segoe UI', sans-serif" font-size="22">Mac의 저장 공간을 한눈에. 데이터는 로컬에.</text>
   <text x="90" y="316" fill="#667085" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17">Native SwiftUI · Local-only analysis · Open source</text>
 
   <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="650">
     <g transform="translate(88 359)">
       <rect width="160" height="42" rx="21" fill="#66D9B7" fill-opacity=".12" stroke="#66D9B7" stroke-opacity=".30"/>
       <circle cx="25" cy="21" r="5" fill="#66D9B7"/>
-      <text x="40" y="27" fill="#B9F4E3">Privacy first</text>
+      <text x="40" y="27" fill="#B9F4E3">로컬 전용</text>
     </g>
     <g transform="translate(260 359)">
       <rect width="153" height="42" rx="21" fill="#6EA8FE" fill-opacity=".12" stroke="#6EA8FE" stroke-opacity=".30"/>
@@ -42,7 +42,7 @@
     </g>
   </g>
 
-  <text x="90" y="475" fill="#667085" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700" letter-spacing="2">LOCAL DISK EXPLORER</text>
+  <text x="90" y="475" fill="#667085" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700" letter-spacing="2">LOCAL-FIRST · OPEN SOURCE</text>
 
   <!-- App window -->
   <g transform="translate(710 58)">
@@ -60,27 +60,27 @@
       <text x="43" y="27" fill="#667085" font-size="7" letter-spacing=".7">LOCAL EXPLORER</text>
     </g>
     <g transform="translate(12 117)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10">
-      <rect width="128" height="38" rx="9" fill="#1B2130"/><circle cx="20" cy="19" r="5" fill="#66D9B7"/><text x="34" y="23" fill="#F4F6FA">Overview</text>
+      <rect width="128" height="38" rx="9" fill="#1B2130"/><circle cx="20" cy="19" r="5" fill="#66D9B7"/><text x="34" y="23" fill="#F4F6FA">전체 보기</text>
       <g transform="translate(0 44)"><rect width="128" height="38" rx="9" fill="none"/><circle cx="20" cy="19" r="5" fill="#6EA8FE"/><text x="34" y="23" fill="#99A3B5">Macintosh HD</text></g>
-      <g transform="translate(0 88)"><rect width="128" height="38" rx="9" fill="none"/><circle cx="20" cy="19" r="5" fill="#F1B45B"/><text x="34" y="23" fill="#99A3B5">Home</text></g>
-      <g transform="translate(0 132)"><rect width="128" height="38" rx="9" fill="none"/><circle cx="20" cy="19" r="5" fill="#F27F87"/><text x="34" y="23" fill="#99A3B5">Downloads</text></g>
+      <g transform="translate(0 88)"><rect width="128" height="38" rx="9" fill="none"/><circle cx="20" cy="19" r="5" fill="#F1B45B"/><text x="34" y="23" fill="#99A3B5">홈</text></g>
+      <g transform="translate(0 132)"><rect width="128" height="38" rx="9" fill="none"/><circle cx="20" cy="19" r="5" fill="#F27F87"/><text x="34" y="23" fill="#99A3B5">다운로드</text></g>
     </g>
     <g transform="translate(21 397)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="7" fill="#667085">
-      <circle cx="4" cy="-2" r="3" fill="#66D9B7"/><text x="14" y="1">LOCAL ONLY</text>
+      <circle cx="4" cy="-2" r="3" fill="#66D9B7"/><text x="14" y="1">로컬 전용</text>
     </g>
 
     <!-- Main metrics -->
     <g transform="translate(174 58)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-      <text x="0" y="13" fill="#F4F6FA" font-size="13" font-weight="700">Space map</text>
-      <text x="0" y="31" fill="#667085" font-size="8">Click a slice to dive in · click the center to go back</text>
+      <text x="0" y="13" fill="#F4F6FA" font-size="13" font-weight="700">공간 지도</text>
+      <text x="0" y="31" fill="#667085" font-size="8">조각 클릭: 진입 · 중앙 클릭: 상위 이동</text>
       <g transform="translate(0 48)">
-        <rect width="126" height="52" rx="11" fill="#1B2130"/><text x="12" y="18" fill="#667085" font-size="7">USED SPACE</text><text x="12" y="39" fill="#F4F6FA" font-size="17" font-weight="700">604.6 GB</text>
+        <rect width="126" height="52" rx="11" fill="#1B2130"/><text x="12" y="18" fill="#667085" font-size="7">사용 공간</text><text x="12" y="39" fill="#F4F6FA" font-size="17" font-weight="700">604.6 GB</text>
       </g>
       <g transform="translate(136 48)">
-        <rect width="126" height="52" rx="11" fill="#1B2130"/><text x="12" y="18" fill="#667085" font-size="7">FILES</text><text x="12" y="39" fill="#F4F6FA" font-size="17" font-weight="700">4.7M</text>
+        <rect width="126" height="52" rx="11" fill="#1B2130"/><text x="12" y="18" fill="#667085" font-size="7">파일</text><text x="12" y="39" fill="#F4F6FA" font-size="17" font-weight="700">4.7M</text>
       </g>
       <g transform="translate(272 48)">
-        <rect width="126" height="52" rx="11" fill="#1B2130"/><text x="12" y="18" fill="#667085" font-size="7">FOLDERS</text><text x="12" y="39" fill="#F4F6FA" font-size="17" font-weight="700">823K</text>
+        <rect width="126" height="52" rx="11" fill="#1B2130"/><text x="12" y="18" fill="#667085" font-size="7">폴더</text><text x="12" y="39" fill="#F4F6FA" font-size="17" font-weight="700">823K</text>
       </g>
     </g>
 
@@ -99,7 +99,7 @@
     </g>
     <g transform="translate(374 290)" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
       <text y="-2" fill="#F4F6FA" font-size="17" font-weight="700">604 GB</text>
-      <text y="16" fill="#99A3B5" font-size="8">LOCAL STORAGE</text>
+      <text y="16" fill="#99A3B5" font-size="8">로컬 저장소</text>
     </g>
   </g>
 </svg>
