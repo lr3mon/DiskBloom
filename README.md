@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/readme-hero.svg" alt="DiskBloom — macOS 로컬 디스크 공간 탐색기" width="100%">
+  <img src=".github/assets/readme-hero-ko.svg" alt="DiskBloom — macOS 로컬 디스크 공간 탐색기" width="100%">
 </p>
 
 <p align="center">

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src=".github/assets/readme-hero.svg" alt="DiskBloom — local-first disk space explorer for macOS" width="100%">
+  <img src=".github/assets/readme-hero-ko.svg" alt="DiskBloom — local-first disk space explorer for macOS" width="100%">
 </p>
 
 <p align="center">
