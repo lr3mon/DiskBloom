@@ -37,7 +37,7 @@ Disk space tools need broad file-system access. DiskBloom is designed around tha
 | --- | --- | --- |
 | Animated sunburst navigation, instant cached locations, large-file lists, and path search | No accounts, servers, analytics, telemetry, or network requests | Trash only—never permanent deletion. Filesystem roots, home, system roots, synthetic nodes, and volume roots are protected |
 
-> DiskBloom is an independent implementation. It does not use DaisyDisk code or assets and is not affiliated with DaisyDisk.
+> DaisyDisk is paid, while DiskBloom is free and open source.
 
 ## Highlights
 
