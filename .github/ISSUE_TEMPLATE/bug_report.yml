@@ -1,0 +1,76 @@
+name: Bug report
+description: Report a reproducible DiskBloom defect
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not attach private cache snapshots or real directory listings.
+        For vulnerabilities or deletion-safety issues, use private vulnerability reporting under the Security tab.
+  - type: input
+    id: version
+    attributes:
+      label: DiskBloom version or commit
+      placeholder: 0.3.2 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac architecture
+      placeholder: macOS 14.6, Apple Silicon
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scan and exclusions
+        - Cache and startup
+        - Sidebar and navigation
+        - Sunburst rendering
+        - Permissions
+        - Finder / Quick Look
+        - Trash operation
+        - Packaging / build
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic paths and filenames where possible.
+      placeholder: |
+        1. Open DiskBloom...
+        2. Select...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Remove usernames, private paths, filenames, and cache contents.
+      render: shell
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed personal file paths, filenames, and cache data from this report.
+          required: true

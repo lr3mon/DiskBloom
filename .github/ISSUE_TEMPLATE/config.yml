@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/lr3mon/DiskBloom/security/advisories/new
+    about: Report vulnerabilities and deletion-safety issues privately.
+  - name: Discussions
+    url: https://github.com/lr3mon/DiskBloom/discussions
+    about: Ask usage questions and discuss broader ideas.

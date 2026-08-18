@@ -1,0 +1,15 @@
+.build/
+.swiftpm/
+DerivedData/
+dist/
+Assets/DiskBloom.iconset/
+Assets/DiskBloom.icns
+.DS_Store
+*.xcuserstate
+xcuserdata/
+*.dSYM/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example

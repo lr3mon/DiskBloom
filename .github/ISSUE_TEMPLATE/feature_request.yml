@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a focused improvement to DiskBloom
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should DiskBloom solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the interaction and expected result.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Scan engine
+        - Visualization and navigation
+        - Cache
+        - Permissions
+        - Safety
+        - Accessibility
+        - Packaging and releases
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, safety, and performance impact
+      description: Note any new file access, network use, deletion behavior, or large-tree cost.
+    validations:
+      required: true
