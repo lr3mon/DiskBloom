@@ -120,6 +120,42 @@ The local build script uses an ad-hoc signature. Public release signing and Appl
 swift run diskbloom-scan ~/Downloads
 ```
 
+Use the CLI to iterate on scanner performance without reinstalling the app. Both entry points share volume discovery, exclusions and the parallel scan implementation.
+
+Run from a terminal with Full Disk Access:
+
+```bash
+# Build only the Release CLI and measure all local storage three times
+./Scripts/benchmark_scan.sh
+
+# Compare a lower worker limit against the default
+./Scripts/benchmark_scan.sh --all-local --repeat 3 --workers 4 --json
+
+# Repeat until Ctrl-C
+./Scripts/benchmark_scan.sh --all-local --repeat 0 --json
+
+# Compare metadata backends on one folder
+./Scripts/benchmark_scan.sh ~/Downloads --compare --warmup 1 --repeat 3 --json
+```
+
+Every run reads the filesystem again without reading or writing the app's snapshot cache. JSON Lines contain elapsed and CPU time, process peak memory, file counts, allocated bytes, unreadable counts and aggregate timings, without file paths. Repeated scans naturally warm the filesystem cache. The `foundation` reference backend uses the current tree-selection implementation; it does not reproduce the entire old app.
+
+Default concurrency follows the available CPU count, capped at eight workers. Set `DISKBLOOM_SCAN_TIMINGS=1` to emit planning, traversal and merge timings plus item counts for the longest tasks to stderr. These diagnostics do not include file paths.
+
+All-local scans check the launching terminal's Full Disk Access before starting. The installed app binary and signature remain unchanged, so CLI experiments do not require renewing the app's permission.
+
+### Performance measurements
+
+Release builds scanned approximately 5.43 million files and 0.91 million folders on local APFS storage using an Apple M1 Max (10 cores, arm64) running macOS 26.5. All-local runs used the same exclusions and retained tree depth.
+
+| Measurement stage | Full scan time |
+| --- | ---: |
+| Original app, single run | 144.99 s |
+| CLI after bulk metadata reads, median of 3 runs | 65.44 s |
+| CLI after planning, buffer, and worker optimizations, median of 3 runs | **39.35 s** |
+
+The final runs took 39.35 s, 37.38 s, and 39.38 s. Median planning time was about 1.56 s, and process peak memory fell from approximately 282 MiB in the earlier CLI measurement to 129 MiB. Repeated runs include filesystem cache effects, while files and background activity on a live Mac can change between runs. These results do not establish cold-scan performance or guarantees for other devices. A fixed test corpus matched the previous engine's file and folder counts, allocated bytes, and unreadable counts.
+
 ## Full Disk Access
 
 macOS does not allow an app to grant Full Disk Access to itself. DiskBloom checks access before the first automatic scan and opens the correct System Settings pane when needed.
