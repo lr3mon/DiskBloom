@@ -6,8 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Shared local-storage scanning core for the app and CLI, including volume discovery, exclusions, scan planning, and result aggregation
+- Release CLI benchmark runner with repeated scans, warmups, configurable worker limits, backend comparison, JSON Lines metrics, and Ctrl-C cancellation
+- Optional planning, traversal, and merge diagnostics without local file paths
+- Regression coverage for sparse files, resource forks, hard links, unreadable folders, AppleDouble filtering, nested mounts, Unicode names, buffer reuse, and parallel scan consistency
+
 ### Changed
 
+- Batch directory metadata reads with `getattrlistbulk`, with Foundation fallback for unsupported filesystems or attributes
+- Reuse leased directory buffers and validate UTF-8 names without Foundation string-search overhead
+- Retain only the largest displayed children and file candidates instead of constructing and sorting every file node
+- Stop scan-plan classification when a branch cannot be split, and compute sorting priorities and the home path once
+- Scale default scan concurrency to the available CPUs, capped at eight workers
+- Throttle progress updates and preserve the existing allocated-size, exclusion, symlink, mount, and deletion-safety behavior
+- Add Full Disk Access preflight checks for all-local CLI benchmarks; benchmark runs leave app snapshots untouched
 - Reorganized the repository documentation around a Korean-first `README.md` with full English documentation in `README_EN.md`
 - Localized the README hero and app mockup labels to match the Korean-first product UI
 

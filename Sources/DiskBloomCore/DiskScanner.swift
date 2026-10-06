@@ -1,19 +1,27 @@
 import Foundation
 
 public final class DiskScanner: @unchecked Sendable {
+    public enum MetadataStrategy: Sendable {
+        case automatic
+        /// Reference backend for compatibility checks and scan diagnostics.
+        case foundation
+    }
+
     public struct Options: Sendable {
         public var maximumTreeDepth: Int
         public var maximumChildrenPerFolder: Int
         public var largestFileLimit: Int
         public var progressItemInterval: Int
         public var excludedPaths: [String]
+        public var metadataStrategy: MetadataStrategy
 
         public init(
             maximumTreeDepth: Int = 8,
             maximumChildrenPerFolder: Int = 160,
             largestFileLimit: Int = 300,
             progressItemInterval: Int = 128,
-            excludedPaths: [String] = []
+            excludedPaths: [String] = [],
+            metadataStrategy: MetadataStrategy = .automatic
         ) {
             self.maximumTreeDepth = max(0, maximumTreeDepth)
             self.maximumChildrenPerFolder = max(8, maximumChildrenPerFolder)
@@ -21,28 +29,17 @@ public final class DiskScanner: @unchecked Sendable {
             self.progressItemInterval = max(16, progressItemInterval)
             self.excludedPaths = excludedPaths.map {
                 var normalized = URL(fileURLWithPath: $0).standardizedFileURL.path
-                while normalized.count > 1 && normalized.hasSuffix("/") {
-                    normalized.removeLast()
-                }
+                while normalized.count > 1 && normalized.hasSuffix("/") { normalized.removeLast() }
                 return normalized
             }
+            self.metadataStrategy = metadataStrategy
         }
     }
 
-    private let fileManager: FileManager
     private let options: Options
     private let cancellationToken: ScanCancellationToken
-    private let resourceKeys: Set<URLResourceKey> = [
-        .isDirectoryKey,
-        .isRegularFileKey,
-        .isSymbolicLinkKey,
-        .fileSizeKey,
-        .fileAllocatedSizeKey,
-        .totalFileAllocatedSizeKey,
-        .contentModificationDateKey
-    ]
-
-    private var topFiles: TopFileHeap
+    private let reader: DirectoryReader
+    private var topFiles: CandidateHeap
     private var processedItems = 0
     private var processedBytes: Int64 = 0
     private var unreadableCount = 0
@@ -56,8 +53,8 @@ public final class DiskScanner: @unchecked Sendable {
     ) {
         self.options = options
         self.cancellationToken = cancellationToken
-        self.fileManager = fileManager
-        self.topFiles = TopFileHeap(limit: options.largestFileLimit)
+        self.reader = DirectoryReader(fileManager: fileManager, strategy: options.metadataStrategy)
+        self.topFiles = CandidateHeap(limit: options.largestFileLimit, compareNames: false)
     }
 
     public func scan(
@@ -70,321 +67,293 @@ public final class DiskScanner: @unchecked Sendable {
         processedBytes = 0
         unreadableCount = 0
         lastProgressAt = 0
-        topFiles = TopFileHeap(limit: options.largestFileLimit)
+        topFiles = CandidateHeap(limit: options.largestFileLimit, compareNames: false)
+        try checkCancellation()
 
         let rootURL = url.standardizedFileURL.resolvingSymlinksInPath()
-        guard fileManager.fileExists(atPath: rootURL.path) else {
+        let path = rootURL.path
+        guard !isExcluded(path, paths: options.excludedPaths),
+              let entry = try? reader.metadata(at: rootURL), entry.kind != .other else {
             throw DiskScanError.inaccessible(rootURL)
         }
-
-        guard let root = try scanEntry(rootURL, depth: 0) else {
-            throw DiskScanError.inaccessible(rootURL)
+        emitProgress(path: path, force: true)
+        let root: DiskNode
+        if entry.kind == .directory {
+            root = try scanDirectory(path: path, entry: entry, depth: 0, exclusions: options.excludedPaths)
+        } else {
+            let candidate = recordFile(entry, parentPath: rootURL.deletingLastPathComponent().path)
+            root = candidate.materialize()
         }
-
-        emitProgress(path: rootURL.path, force: true)
+        emitProgress(path: path, force: true)
         return ScanResult(
             root: root,
-            largestFiles: topFiles.sortedDescending(),
+            largestFiles: topFiles.sortedDescending().map { $0.materialize() },
             unreadableCount: unreadableCount,
             elapsed: Date().timeIntervalSince(startedAt)
         )
     }
 
-    private func scanEntry(_ url: URL, depth: Int) throws -> DiskNode? {
+    private func scanDirectory(path: String, entry: ScanEntry, depth: Int, exclusions: [String]) throws -> DiskNode {
         try checkCancellation()
-        if isExcluded(url) { return nil }
-
-        let values: URLResourceValues
-        do {
-            values = try url.resourceValues(forKeys: resourceKeys)
-        } catch {
-            unreadableCount += 1
-            return nil
-        }
-
-        if values.isSymbolicLink == true {
-            return nil
-        }
-
-        if values.isDirectory == true {
-            processedItems += 1
-            emitProgress(path: url.path)
-
-            if depth >= options.maximumTreeDepth {
-                return try scanCollapsedDirectory(url, rootValues: values)
-            }
-
-            let entries: [URL]
-            do {
-                entries = try fileManager.contentsOfDirectory(
-                    at: url,
-                    includingPropertiesForKeys: Array(resourceKeys),
-                    options: []
-                )
-            } catch {
-                unreadableCount += 1
-                return DiskNode(
-                    name: displayName(for: url),
-                    url: url,
-                    size: 0,
-                    kind: .folder,
-                    fileCount: 0,
-                    folderCount: 1,
-                    modifiedAt: values.contentModificationDate
-                )
-            }
-
-            var children: [DiskNode] = []
-            children.reserveCapacity(min(entries.count, options.maximumChildrenPerFolder + 1))
-            var totalSize: Int64 = 0
-            var fileCount = 0
-            var folderCount = 1
-
-            for entry in entries {
-                try checkCancellation()
-                if let child = try autoreleasepool(invoking: {
-                    try scanEntry(entry, depth: depth + 1)
-                }) {
-                    children.append(child)
-                    totalSize = safeAdd(totalSize, child.size)
-                    fileCount += child.fileCount
-                    folderCount += child.folderCount
-                }
-            }
-
-            children.sort { lhs, rhs in
-                if lhs.size == rhs.size { return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending }
-                return lhs.size > rhs.size
-            }
-
-            let displayedChildren = compress(children: children)
-            return DiskNode(
-                name: displayName(for: url),
-                url: url,
-                size: totalSize,
-                kind: .folder,
-                children: displayedChildren,
-                fileCount: fileCount,
-                folderCount: folderCount,
-                modifiedAt: values.contentModificationDate
-            )
-        }
-
-        guard values.isRegularFile == true else { return nil }
-        let size = allocatedSize(from: values)
-        let node = DiskNode(
-            name: displayName(for: url),
-            url: url,
-            size: size,
-            kind: .file,
-            fileCount: 1,
-            folderCount: 0,
-            modifiedAt: values.contentModificationDate
-        )
-        topFiles.insert(node)
         processedItems += 1
-        processedBytes = safeAdd(processedBytes, size)
-        emitProgress(path: url.path)
-        return node
+        emitProgress(path: path)
+        if depth >= options.maximumTreeDepth {
+            return try scanCollapsedDirectory(path: path, entry: entry, exclusions: exclusions)
+        }
+
+        var children = ChildAccumulator(limit: options.maximumChildrenPerFolder)
+        let childExclusions = descendantExclusions(of: path, paths: exclusions)
+        try reader.enumerate(path: path, checkCancellation: checkCancellation, unreadable: { self.unreadableCount += 1 }) { child in
+            guard child.kind != .other else { return }
+            // Once outside excluded branches, files need no path construction or normalization.
+            if !childExclusions.isEmpty && isExcluded(childPath(path, child.name), paths: childExclusions) { return }
+            if child.kind == .directory {
+                let node = try scanDirectory(path: childPath(path, child.name), entry: child, depth: depth + 1, exclusions: childExclusions)
+                children.insert(NodeCandidate(folder: node))
+            } else {
+                children.insert(recordFile(child, parentPath: path))
+            }
+        }
+        return DiskNode(
+            name: displayName(path: path, name: entry.name),
+            url: URL(fileURLWithPath: path, isDirectory: true),
+            size: children.totalSize,
+            kind: .folder,
+            children: children.materialize(),
+            fileCount: children.fileCount,
+            folderCount: 1 + children.folderCount,
+            modifiedAt: entry.modifiedAt
+        )
     }
 
-    private func scanCollapsedDirectory(
-        _ url: URL,
-        rootValues: URLResourceValues
-    ) throws -> DiskNode {
+    private func scanCollapsedDirectory(path: String, entry: ScanEntry, exclusions: [String]) throws -> DiskNode {
         var totalSize: Int64 = 0
         var fileCount = 0
         var folderCount = 1
-
-        guard let enumerator = fileManager.enumerator(
-            at: url,
-            includingPropertiesForKeys: Array(resourceKeys),
-            options: [],
-            errorHandler: { [weak self] _, _ in
-                self?.unreadableCount += 1
-                return true
-            }
-        ) else {
-            unreadableCount += 1
-            return DiskNode(
-                name: displayName(for: url),
-                url: url,
-                size: 0,
-                kind: .folder,
-                fileCount: 0,
-                folderCount: 1,
-                modifiedAt: rootValues.contentModificationDate
-            )
-        }
-
-        for case let entry as URL in enumerator {
-            try autoreleasepool {
-                try checkCancellation()
-                if isExcluded(entry) {
-                    enumerator.skipDescendants()
-                    return
-                }
-                let values: URLResourceValues
-                do {
-                    values = try entry.resourceValues(forKeys: resourceKeys)
-                } catch {
-                    unreadableCount += 1
-                    return
-                }
-                if values.isSymbolicLink == true { return }
-                if values.isDirectory == true {
+        var pending: [(path: String, exclusions: [String])] = [(path, exclusions)]
+        // Iterative traversal keeps very deep trees off the call stack and closes
+        // each directory descriptor before opening the next one.
+        while let directory = pending.popLast() {
+            try checkCancellation()
+            let childExclusions = descendantExclusions(of: directory.path, paths: directory.exclusions)
+            try reader.enumerate(path: directory.path, checkCancellation: checkCancellation, unreadable: { self.unreadableCount += 1 }) { child in
+                guard child.kind != .other else { return }
+                if !childExclusions.isEmpty && isExcluded(childPath(directory.path, child.name), paths: childExclusions) { return }
+                if child.kind == .directory {
+                    let childDirectory = childPath(directory.path, child.name)
+                    // Foundation's recursive enumerator stops at nested mounts.
+                    // Preserve that behavior so hidden simulator / system mounts
+                    // are not added again to their containing local volume.
+                    if !child.isMountPoint { pending.append((childDirectory, childExclusions)) }
                     folderCount += 1
                     processedItems += 1
-                    emitProgress(path: entry.path)
-                    return
+                    emitProgress(path: childDirectory)
+                } else {
+                    totalSize = safeAdd(totalSize, child.size)
+                    fileCount += 1
+                    _ = recordFile(child, parentPath: directory.path)
                 }
-                guard values.isRegularFile == true else { return }
-
-                let size = allocatedSize(from: values)
-                totalSize = safeAdd(totalSize, size)
-                fileCount += 1
-                processedItems += 1
-                processedBytes = safeAdd(processedBytes, size)
-                topFiles.insert(
-                    DiskNode(
-                        name: displayName(for: entry),
-                        url: entry,
-                        size: size,
-                        kind: .file,
-                        fileCount: 1,
-                        folderCount: 0,
-                        modifiedAt: values.contentModificationDate
-                    )
-                )
-                emitProgress(path: entry.path)
             }
         }
-
         return DiskNode(
-            name: displayName(for: url),
-            url: url,
+            name: displayName(path: path, name: entry.name),
+            url: URL(fileURLWithPath: path, isDirectory: true),
             size: totalSize,
             kind: .folder,
-            children: [],
             fileCount: fileCount,
             folderCount: folderCount,
-            modifiedAt: rootValues.contentModificationDate
+            modifiedAt: entry.modifiedAt
         )
     }
 
-    private func compress(children: [DiskNode]) -> [DiskNode] {
-        guard children.count > options.maximumChildrenPerFolder else { return children }
-        let keepCount = max(1, options.maximumChildrenPerFolder - 1)
-        let kept = Array(children.prefix(keepCount))
-        let omitted = children.dropFirst(keepCount)
-        let aggregate = DiskNode(
-            name: "기타 \(DiskBloomFormat.count(omitted.count))개 항목",
-            url: nil,
-            size: omitted.reduce(0) { safeAdd($0, $1.size) },
-            kind: .aggregate,
-            fileCount: omitted.reduce(0) { $0 + $1.fileCount },
-            folderCount: omitted.reduce(0) { $0 + $1.folderCount }
-        )
-        return kept + [aggregate]
+    private func recordFile(_ entry: ScanEntry, parentPath: String) -> NodeCandidate {
+        var candidate = NodeCandidate(file: entry, parentPath: parentPath)
+        // Candidates are lightweight values; UUIDs, URLs and DiskNodes are created
+        // only for the retained children / largest files.
+        if topFiles.wouldAccept(size: entry.size) {
+            candidate.retainNode()
+            _ = topFiles.insert(candidate)
+        }
+        processedItems += 1
+        processedBytes = safeAdd(processedBytes, entry.size)
+        emitProgress(path: childPath(parentPath, entry.name))
+        return candidate
     }
 
-    private func allocatedSize(from values: URLResourceValues) -> Int64 {
-        let raw = values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? values.fileSize ?? 0
-        return Int64(max(0, raw))
-    }
-
-    private func displayName(for url: URL) -> String {
-        let name = url.lastPathComponent
-        if !name.isEmpty { return name }
-        return url.path == "/" ? "Macintosh HD" : url.path
-    }
-
-    private func emitProgress(path: String, force: Bool = false) {
-        let now = Date.timeIntervalSinceReferenceDate
-        let itemBoundary = processedItems % options.progressItemInterval == 0
-        guard force || itemBoundary || now - lastProgressAt > 0.15 else { return }
+    private func emitProgress(path: @autoclosure () -> String, force: Bool = false) {
+        guard force || processedItems % options.progressItemInterval == 0 else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard force || now - lastProgressAt >= 0.15 else { return }
         lastProgressAt = now
-        progressHandler(
-            ScanProgress(
-                items: processedItems,
-                bytes: processedBytes,
-                currentPath: path
-            )
-        )
+        progressHandler(ScanProgress(items: processedItems, bytes: processedBytes, currentPath: path()))
     }
 
     private func checkCancellation() throws {
-        if cancellationToken.isCancelled {
-            throw DiskScanError.cancelled
-        }
+        if cancellationToken.isCancelled { throw DiskScanError.cancelled }
     }
 
-    private func isExcluded(_ url: URL) -> Bool {
-        guard !options.excludedPaths.isEmpty else { return false }
-        let path = url.standardizedFileURL.path
-        return options.excludedPaths.contains { excluded in
+    private func isExcluded(_ path: String, paths: [String]) -> Bool {
+        paths.contains { excluded in
             path == excluded || (excluded != "/" && path.hasPrefix(excluded + "/"))
         }
     }
 
-    private func safeAdd(_ lhs: Int64, _ rhs: Int64) -> Int64 {
-        let (value, overflow) = lhs.addingReportingOverflow(rhs)
-        return overflow ? Int64.max : value
+    private func descendantExclusions(of path: String, paths: [String]) -> [String] {
+        guard !paths.isEmpty else { return [] }
+        let prefix = path == "/" ? "/" : path + "/"
+        return paths.filter { $0.hasPrefix(prefix) }
+    }
+
+    private func displayName(path: String, name: String) -> String {
+        !name.isEmpty ? name : (path == "/" ? "Macintosh HD" : path)
     }
 }
 
-private struct TopFileHeap {
-    private var values: [DiskNode] = []
+private func childPath(_ parent: String, _ name: String) -> String {
+    parent == "/" ? "/" + name : parent + "/" + name
+}
+
+private func safeAdd(_ lhs: Int64, _ rhs: Int64) -> Int64 {
+    let (value, overflow) = lhs.addingReportingOverflow(rhs)
+    return overflow ? Int64.max : value
+}
+
+private struct NodeCandidate {
+    let name: String
+    let size: Int64
+    let fileCount: Int
+    let folderCount: Int
+    private let parentPath: String
+    private let modifiedAt: Date?
+    private var retainedNode: DiskNode?
+
+    init(file: ScanEntry, parentPath: String) {
+        self.name = file.name
+        self.size = file.size
+        self.fileCount = 1
+        self.folderCount = 0
+        self.parentPath = parentPath
+        self.modifiedAt = file.modifiedAt
+        self.retainedNode = nil
+    }
+
+    init(folder: DiskNode) {
+        self.name = folder.name
+        self.size = folder.size
+        self.fileCount = folder.fileCount
+        self.folderCount = folder.folderCount
+        self.parentPath = ""
+        self.modifiedAt = folder.modifiedAt
+        self.retainedNode = folder
+    }
+
+    func materialize() -> DiskNode {
+        retainedNode ?? DiskNode(name: name, url: URL(fileURLWithPath: childPath(parentPath, name)), size: size,
+                           kind: .file, fileCount: 1, folderCount: 0, modifiedAt: modifiedAt)
+    }
+
+    mutating func retainNode() {
+        if retainedNode == nil { retainedNode = materialize() }
+    }
+}
+
+/// The root is the worst retained candidate, so selecting the displayed top K
+/// requires O(N log K) work and O(K) retained candidates instead of sorting N.
+private struct CandidateHeap {
+    private var values: [NodeCandidate] = []
     private let limit: Int
+    private let compareNames: Bool
 
-    init(limit: Int) {
-        self.limit = max(1, limit)
+    init(limit: Int, compareNames: Bool) {
+        self.limit = limit
+        self.compareNames = compareNames
+        values.reserveCapacity(limit)
     }
 
-    mutating func insert(_ node: DiskNode) {
-        guard node.kind == .file else { return }
+    func wouldAccept(size: Int64) -> Bool {
+        values.count < limit || size > (values.first?.size ?? 0)
+    }
+
+    mutating func insert(_ candidate: NodeCandidate) -> NodeCandidate? {
         if values.count < limit {
-            values.append(node)
-            siftUp(from: values.count - 1)
-            return
+            values.append(candidate)
+            var child = values.count - 1
+            while child > 0 {
+                let parent = (child - 1) / 2
+                guard better(values[parent], than: values[child]) else { break }
+                values.swapAt(child, parent)
+                child = parent
+            }
+            return nil
         }
-        guard let smallest = values.first, node.size > smallest.size else { return }
-        values[0] = node
-        siftDown(from: 0)
+        guard better(candidate, than: values[0]) else { return candidate }
+        let discarded = values[0]
+        values[0] = candidate
+        var parent = 0
+        while true {
+            let left = parent * 2 + 1
+            let right = left + 1
+            var worst = parent
+            if left < values.count && better(values[worst], than: values[left]) { worst = left }
+            if right < values.count && better(values[worst], than: values[right]) { worst = right }
+            guard worst != parent else { break }
+            values.swapAt(parent, worst)
+            parent = worst
+        }
+        return discarded
     }
 
-    func sortedDescending() -> [DiskNode] {
+    func sortedDescending() -> [NodeCandidate] {
         values.sorted { lhs, rhs in
             if lhs.size == rhs.size { return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending }
             return lhs.size > rhs.size
         }
     }
 
-    private mutating func siftUp(from start: Int) {
-        var child = start
-        while child > 0 {
-            let parent = (child - 1) / 2
-            guard values[child].size < values[parent].size else { break }
-            values.swapAt(child, parent)
-            child = parent
-        }
+    private func better(_ lhs: NodeCandidate, than rhs: NodeCandidate) -> Bool {
+        if lhs.size != rhs.size { return lhs.size > rhs.size }
+        return compareNames && lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+}
+
+private struct ChildAccumulator {
+    private var heap: CandidateHeap
+    private let limit: Int
+    private var count = 0
+    private var omittedSize: Int64 = 0
+    private var omittedFiles = 0
+    private var omittedFolders = 0
+    private(set) var totalSize: Int64 = 0
+    private(set) var fileCount = 0
+    private(set) var folderCount = 0
+
+    init(limit: Int) {
+        self.limit = limit
+        self.heap = CandidateHeap(limit: limit, compareNames: true)
     }
 
-    private mutating func siftDown(from start: Int) {
-        var parent = start
-        while true {
-            let left = parent * 2 + 1
-            let right = left + 1
-            var candidate = parent
-            if left < values.count && values[left].size < values[candidate].size {
-                candidate = left
-            }
-            if right < values.count && values[right].size < values[candidate].size {
-                candidate = right
-            }
-            guard candidate != parent else { return }
-            values.swapAt(parent, candidate)
-            parent = candidate
-        }
+    mutating func insert(_ candidate: NodeCandidate) {
+        count += 1
+        totalSize = safeAdd(totalSize, candidate.size)
+        fileCount += candidate.fileCount
+        folderCount += candidate.folderCount
+        if let omitted = heap.insert(candidate) { recordOmitted(omitted) }
+    }
+
+    mutating func materialize() -> [DiskNode] {
+        var kept = heap.sortedDescending()
+        guard count > limit else { return kept.map { $0.materialize() } }
+        recordOmitted(kept.removeLast())
+        let aggregate = DiskNode(
+            name: "기타 \(DiskBloomFormat.count(count - kept.count))개 항목", url: nil,
+            size: omittedSize, kind: .aggregate, fileCount: omittedFiles, folderCount: omittedFolders
+        )
+        return kept.map { $0.materialize() } + [aggregate]
+    }
+
+    private mutating func recordOmitted(_ candidate: NodeCandidate) {
+        omittedSize = safeAdd(omittedSize, candidate.size)
+        omittedFiles += candidate.fileCount
+        omittedFolders += candidate.folderCount
     }
 }
